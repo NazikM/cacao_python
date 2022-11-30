@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal as DecimalNumber, getcontext, InvalidOperation
-
+from datetime import datetime
 
 MISSING = object()
 
@@ -15,7 +15,13 @@ class Schema:
                     raise TypeError(f"Missing a required value for field {key}")
 
     def to_dict(self):
-        return {key: getattr(self, key) for key, value in type(self).__dict__.items() if isinstance(value, Field) and not value.write_only}
+        res = {}
+        for key, value in type(self).__dict__.items():
+            if isinstance(value, NestedField):
+                res[key] = getattr(self, key).to_dict()
+            elif isinstance(value, Field) and not value.write_only:
+                res[key] = getattr(self, key)
+        return res
 
 
 class Field(ABC):
@@ -54,7 +60,7 @@ class Field(ABC):
         pass
 
 
-class Integer(Field):
+class IntegerField(Field):
     def __init__(self, min_value=None, max_value=None, **kwargs):
         super().__init__(**kwargs)
         self.min_value = min_value
@@ -78,7 +84,7 @@ class Integer(Field):
         setattr(obj, self.private_name, int(value))
 
 
-class String(Field):
+class StringField(Field):
     def __init__(self, min_length=None, max_length=None, strict=True, **kwargs):
         super().__init__(**kwargs)
         self.min_length = min_length
@@ -99,7 +105,7 @@ class String(Field):
         return "String"
 
 
-class Decimal(Field):
+class DecimalField(Field):
     def __init__(self, min_value=None, max_value=None, as_float=False, precision=12, **kwargs):
         super().__init__(**kwargs)
         self.min_value = min_value
@@ -127,3 +133,25 @@ class Decimal(Field):
 
     def __str__(self):
         return "Decimal"
+
+
+class DateTimeField(Field):
+    def validate(self, value):
+        if isinstance(value, datetime) and not isinstance(value, str):
+            raise TypeError(f"Expected string or datetime type, but given {type(value)}") from None
+
+    def __str__(self):
+        return "Datetime"
+
+
+class NestedField(Field):
+    def __init__(self, schema=None, **kwargs):
+        super().__init__(**kwargs)
+        self.schema = schema
+
+    def validate(self, value):
+        # print(self.schema.__mro__, Schema, isinstance(self.schema, Schema))
+        # Why is not working ???
+        # if not isinstance(self.schema, Schema):
+        if Schema not in self.schema.__mro__:
+            raise TypeError(f"Expected Schema type, but given {type(value)}") from None
