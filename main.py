@@ -14,6 +14,18 @@ class Test(cacao.Schema):
 
 
 marks = Marks(mark_1=86, mark_2=98)
-t = Test(full_name="Nazarii Marusyn", age='20', money='23.4564566', marks=marks)
+t = Test(full_name="Nazarii Marusyn", age='20', money='23.4564566', marks={"mark_1": 86, "mark_2": 98})
 
 print(t.to_dict())
+
+data = {
+    "full_name": "Nazarii Marusyn",
+    "age": '20',
+    'money': "23.34534",
+    "marks": {
+        "mark_1": 86,
+        "mark_2": 98
+    }
+}
+t2 = Test.from_dict(data).to_dict()
+print(t2)

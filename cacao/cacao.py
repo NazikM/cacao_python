@@ -14,12 +14,14 @@ class Schema:
                 except TypeError:
                     raise TypeError(f"Missing a required value for field {key}")
 
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
     def to_dict(self):
         res = {}
         for key, value in type(self).__dict__.items():
-            if isinstance(value, NestedField):
-                res[key] = getattr(self, key).to_dict()
-            elif isinstance(value, Field) and not value.write_only:
+            if isinstance(value, Field) and not value.write_only:
                 res[key] = getattr(self, key)
         return res
 
@@ -150,8 +152,14 @@ class NestedField(Field):
         self.schema = schema
 
     def validate(self, value):
-        # print(self.schema.__mro__, Schema, isinstance(self.schema, Schema))
-        # Why is not working ???
-        # if not isinstance(self.schema, Schema):
-        if Schema not in self.schema.__mro__:
+        if not issubclass(self.schema, Schema):
             raise TypeError(f"Expected Schema type, but given {type(value)}") from None
+
+    def __set__(self, obj, value):
+        super().__set__(obj, value)
+        setattr(obj, self.private_name, self.schema(**value))
+
+    def __get__(self, obj, objtype=None):
+        if self.write_only:
+            raise AttributeError("This is write only attribute")
+        return getattr(obj, self.private_name).to_dict()
