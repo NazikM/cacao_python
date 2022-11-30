@@ -145,7 +145,7 @@ class DateTimeField(Field):
 
 
 class NestedField(Field):
-    def __init__(self, schema=None, **kwargs):
+    def __init__(self, schema, **kwargs):
         super().__init__(**kwargs)
         self.schema = schema
 
