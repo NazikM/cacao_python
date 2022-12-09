@@ -4,10 +4,24 @@ from datetime import datetime
 
 MISSING = object()
 
+__all__ = (
+    'Schema',
+    'Field',
+    'IntegerField',
+    'StringField',
+    'DecimalField',
+    'DateTimeField',
+    'NestedField'
+)
+
 
 class Schema:
     def __init__(self, **kwargs):
-        for key, value in type(self).__dict__.items():
+        for key, value in kwargs.items():
+            if key not in vars(type(self)):
+                raise TypeError("Too many attributes!")
+
+        for key, value in vars(type(self)).items():
             if isinstance(value, Field):
                 try:
                     setattr(self, key, kwargs.get(key, MISSING))
@@ -39,8 +53,6 @@ class Field(ABC):
         self.private_name = '_' + name
 
     def __get__(self, obj, objtype=None):
-        if self.write_only:
-            raise AttributeError("This is write only attribute")
         return getattr(obj, self.private_name)
 
     def __set__(self, obj, value):
@@ -55,11 +67,17 @@ class Field(ABC):
 
         if value:
             self.validate(value)
+
+        value = self.cast(value)
+
         setattr(obj, self.private_name, value)
 
     @abstractmethod
     def validate(self, value):
         pass
+
+    def cast(self, value):
+        return value
 
 
 class IntegerField(Field):
@@ -81,9 +99,8 @@ class IntegerField(Field):
     def __str__(self):
         return "Integer"
 
-    def __set__(self, obj, value):
-        super().__set__(obj, value)
-        setattr(obj, self.private_name, int(value))
+    def cast(self, value):
+        return int(value)
 
 
 class StringField(Field):
@@ -129,12 +146,11 @@ class DecimalField(Field):
         if self.max_value is not None and value > self.max_value:
             raise ValueError(f"Expected value bigger than {self.max_value}, but given {value}")
 
-    def __set__(self, obj, value):
-        super().__set__(obj, value)
-        setattr(obj, self.private_name, float(value) if self.as_float else DecimalNumber(value))
-
     def __str__(self):
         return "Decimal"
+
+    def cast(self, value):
+        return float(value) if self.as_float else DecimalNumber(value)
 
 
 class DateTimeField(Field):
@@ -155,11 +171,10 @@ class NestedField(Field):
         if not issubclass(self.schema, Schema):
             raise TypeError(f"Expected Schema type, but given {type(value)}") from None
 
-    def __set__(self, obj, value):
-        super().__set__(obj, value)
-        setattr(obj, self.private_name, self.schema(**value))
-
     def __get__(self, obj, objtype=None):
         if self.write_only:
             raise AttributeError("This is write only attribute")
         return getattr(obj, self.private_name).to_dict()
+
+    def cast(self, value):
+        return self.schema(**value)
