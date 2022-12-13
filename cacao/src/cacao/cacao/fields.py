@@ -2,51 +2,11 @@ from abc import ABC, abstractmethod
 from decimal import Decimal as DecimalNumber, getcontext, InvalidOperation
 from datetime import datetime
 
-MISSING = object()
-
-__all__ = (
-    'Schema',
-    'Field',
-    'IntegerField',
-    'StringField',
-    'DecimalField',
-    'DateTimeField',
-    'NestedField'
-)
-
-
-class Schema:
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            if key not in vars(type(self)):
-                raise TypeError("Too many arguments!")
-
-        for key, value in vars(type(self)).items():
-            if isinstance(value, Field):
-                setattr(self, key, kwargs.get(key, MISSING))
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
-    def to_dict(self):
-        res = {}
-        for key, value in type(self).__dict__.items():
-            if isinstance(value, Field) and not value.write_only:
-                val = getattr(self, key)
-                if val is not MISSING:
-                    if isinstance(val, Schema):
-                        val = val.to_dict()
-                    res[key] = val
-        return res
+from cacao.src.cacao.cacao.missing import MISSING
 
 
 class Field(ABC):
-    def __init__(self, required=False, default=MISSING, write_only=False):
-        if required and default is not MISSING:
-            raise TypeError(f"'default' must not be set for required fields.")
-
-        self.required = required
+    def __init__(self, default=MISSING, write_only=False):
         self.default = default
         self.write_only = write_only
 
@@ -58,10 +18,7 @@ class Field(ABC):
 
     def __set__(self, obj, value):
         if value is MISSING:
-            if self.default is MISSING:
-                self.raise_if_required()
-            else:
-                value = self.default
+            value = self.default
         else:
             self.validate(value)
             value = self.cast(obj, value)
@@ -75,14 +32,39 @@ class Field(ABC):
     def cast(self, obj, value):
         return value
 
+
+from cacao.src.cacao.cacao.schemas import Schema
+
+
+class RequiredField(Field, ABC):
+    def __init__(self, required=False, default=MISSING, write_only=False):
+        super().__init__(default, write_only)
+
+        if required and default is not MISSING:
+            raise TypeError(f"'default' must not be set for required fields.")
+
+        self.required = required
+
+    def __set__(self, obj, value):
+        if value is MISSING:
+            if self.default is MISSING:
+                self.raise_if_required()
+            else:
+                value = self.default
+        else:
+            self.validate(value)
+            value = self.cast(obj, value)
+
+        self.value = value
+
     def raise_if_required(self):
         if self.required:
             raise TypeError(f"Missing a required value for field {self.field_name}")
 
 
 class MethodField(Field):
-    def __init__(self, method=MISSING, required=False, **kwargs):
-        super().__init__(required=required, **kwargs)
+    def __init__(self, method=MISSING, **kwargs):
+        super().__init__(**kwargs)
         self.method = method
 
     def get_name(self):
@@ -97,7 +79,7 @@ class MethodField(Field):
         pass
 
 
-class IntegerField(Field):
+class IntegerField(RequiredField):
     def __init__(self, min_value=None, max_value=None, **kwargs):
         super().__init__(**kwargs)
         self.min_value = min_value
@@ -118,7 +100,7 @@ class IntegerField(Field):
         return int(value)
 
 
-class StringField(Field):
+class StringField(RequiredField):
     def __init__(self, min_length=None, max_length=None, strict=True, **kwargs):
         super().__init__(**kwargs)
         self.min_length = min_length
@@ -136,7 +118,7 @@ class StringField(Field):
             raise ValueError(f"Expected length bigger than {self.max_length}")
 
 
-class DecimalField(Field):
+class DecimalField(RequiredField):
     def __init__(self, min_value=None, max_value=None, as_float=False, precision=12, **kwargs):
         super().__init__(**kwargs)
         self.min_value = min_value
@@ -162,13 +144,13 @@ class DecimalField(Field):
         return float(value) if self.as_float else DecimalNumber(value)
 
 
-class DateTimeField(Field):
+class DateTimeField(RequiredField):
     def validate(self, value):
         if isinstance(value, datetime) and not isinstance(value, str):
             raise TypeError(f"Expected string or datetime type, but given {type(value)}")
 
 
-class NestedField(Field):
+class NestedField(RequiredField):
     def __init__(self, schema, **kwargs):
         super().__init__(**kwargs)
         self.schema = schema

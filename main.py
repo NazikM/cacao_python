@@ -1,4 +1,4 @@
-from cacao.src.cacao.cacao import classes
+from cacao.src.cacao.cacao import schemas
 
 
 class Marks(classes.Schema):
