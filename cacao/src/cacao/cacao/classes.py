@@ -19,14 +19,11 @@ class Schema:
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
             if key not in vars(type(self)):
-                raise TypeError("Too many attributes!")
+                raise TypeError("Too many arguments!")
 
         for key, value in vars(type(self)).items():
             if isinstance(value, Field):
-                try:
-                    setattr(self, key, kwargs.get(key, MISSING))
-                except TypeError:
-                    raise TypeError(f"Missing a required value for field {key}")
+                setattr(self, key, kwargs.get(key, MISSING))
 
     @classmethod
     def from_dict(cls, data):
@@ -36,48 +33,68 @@ class Schema:
         res = {}
         for key, value in type(self).__dict__.items():
             if isinstance(value, Field) and not value.write_only:
-                res[key] = getattr(self, key)
+                val = getattr(self, key)
+                if val is not MISSING:
+                    if isinstance(val, Schema):
+                        val = val.to_dict()
+                    res[key] = val
         return res
 
 
 class Field(ABC):
-    def __init__(self, required=True, default=MISSING, write_only=False):
-        if not required and default is not MISSING:
-            raise TypeError(f"You cannot specify required=False with default argument. Try to put  required=True")
+    def __init__(self, required=False, default=MISSING, write_only=False):
+        if required and default is not MISSING:
+            raise TypeError(f"'default' must not be set for required fields.")
 
         self.required = required
         self.default = default
         self.write_only = write_only
 
     def __set_name__(self, owner, name):
-        self.private_name = '_' + name
+        self.field_name = name
 
     def __get__(self, obj, objtype=None):
-        return getattr(obj, self.private_name)
+        return self.value
 
     def __set__(self, obj, value):
-        if self.required and (value is MISSING) and (self.default is MISSING):
-            raise TypeError(f"Missing a required value for field with type {self}")
-
         if value is MISSING:
             if self.default is MISSING:
-                value = None
+                self.raise_if_required()
             else:
                 value = self.default
-
-        if value:
+        else:
             self.validate(value)
+            value = self.cast(obj, value)
 
-        value = self.cast(value)
-
-        setattr(obj, self.private_name, value)
+        self.value = value
 
     @abstractmethod
     def validate(self, value):
         pass
 
-    def cast(self, value):
+    def cast(self, obj, value):
         return value
+
+    def raise_if_required(self):
+        if self.required:
+            raise TypeError(f"Missing a required value for field {self.field_name}")
+
+
+class MethodField(Field):
+    def __init__(self, method=MISSING, required=False, **kwargs):
+        super().__init__(required=required, **kwargs)
+        self.method = method
+
+    def get_name(self):
+        if self.method is not MISSING:
+            return self.method
+        return "get_" + self.field_name
+
+    def __get__(self, obj, objtype=None):
+        return getattr(obj, self.get_name())()
+
+    def validate(self, value):
+        pass
 
 
 class IntegerField(Field):
@@ -89,17 +106,15 @@ class IntegerField(Field):
     def validate(self, value):
         try:
             value = int(value)
-        except TypeError:
-            raise TypeError(f"Expected integer value, but given {type(value)}") from None
+        except ValueError:
+            raise ValueError(f"Expected integer value, but given '{value}'")
+
         if self.min_value is not None and value < self.min_value:
-            raise ValueError(f"Expected value less than {self.min_value}, but given {value}")
+            raise ValueError(f"Expected value bigger than {self.min_value}, but given {value}")
         if self.max_value is not None and value > self.max_value:
-            raise ValueError(f"Expected value bigger than {self.max_value}, but given {value}")
+            raise ValueError(f"Expected value less than {self.max_value}, but given {value}")
 
-    def __str__(self):
-        return "Integer"
-
-    def cast(self, value):
+    def cast(self, obj, value):
         return int(value)
 
 
@@ -112,16 +127,13 @@ class StringField(Field):
 
     def validate(self, value):
         if self.strict and not isinstance(value, str):
-            raise TypeError(f"Expected string value, but given {type(value)}") from None
+            raise TypeError(f"Expected string value, but given {type(value)}")
 
         value = str(value)
         if self.min_length is not None and len(value) < self.min_length:
             raise ValueError(f"Expected length less than {self.min_length}")
         if self.max_length is not None and len(value) > self.max_length:
             raise ValueError(f"Expected length bigger than {self.max_length}")
-
-    def __str__(self):
-        return "String"
 
 
 class DecimalField(Field):
@@ -140,26 +152,20 @@ class DecimalField(Field):
                 getcontext().prec = self.precision
                 value = DecimalNumber(value)
         except (TypeError, InvalidOperation):
-            raise TypeError(f"Expected Decimal value, but given {type(value)}") from None
+            raise TypeError(f"Expected Decimal value, but given {type(value)}")
         if self.min_value is not None and value < self.min_value:
             raise ValueError(f"Expected value less than {self.min_value}, but given {value}")
         if self.max_value is not None and value > self.max_value:
             raise ValueError(f"Expected value bigger than {self.max_value}, but given {value}")
 
-    def __str__(self):
-        return "Decimal"
-
-    def cast(self, value):
+    def cast(self, obj, value):
         return float(value) if self.as_float else DecimalNumber(value)
 
 
 class DateTimeField(Field):
     def validate(self, value):
         if isinstance(value, datetime) and not isinstance(value, str):
-            raise TypeError(f"Expected string or datetime type, but given {type(value)}") from None
-
-    def __str__(self):
-        return "Datetime"
+            raise TypeError(f"Expected string or datetime type, but given {type(value)}")
 
 
 class NestedField(Field):
@@ -167,14 +173,14 @@ class NestedField(Field):
         super().__init__(**kwargs)
         self.schema = schema
 
-    def validate(self, value):
-        if not issubclass(self.schema, Schema):
-            raise TypeError(f"Expected Schema type, but given {type(value)}") from None
-
-    def __get__(self, obj, objtype=None):
-        if self.write_only:
-            raise AttributeError("This is write only attribute")
-        return getattr(obj, self.private_name).to_dict()
-
-    def cast(self, value):
+    def cast(self, obj, value):
+        # if self.schema == 'self':
+        #     self.schema = type(obj)
         return self.schema(**value)
+
+    def validate(self, value):
+        # if self.schema == 'self':
+        #     return
+
+        if not issubclass(self.schema, Schema):
+            raise TypeError(f"Expected Schema type, but given {type(value)}")
