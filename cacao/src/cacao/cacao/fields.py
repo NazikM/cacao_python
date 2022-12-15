@@ -19,7 +19,7 @@ class Field(ABC):
         self.field_name = name
 
     def __get__(self, obj, objtype=None):
-        return vars(obj)[self.field_name]
+        return vars(obj).get(self.field_name, MISSING)
 
     def __set__(self, obj, value):
         if value is MISSING:

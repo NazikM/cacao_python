@@ -1,9 +1,9 @@
 from cacao.src.cacao.cacao import fields, schemas
 
 
-class MyIntegerField(fields.IntegerField):
-    def __get__(self, obj, obj_type=None):
-        return super().__get__(obj, obj_type) + 100
+# class MyIntegerField(fields.IntegerField):
+#     def __get__(self, obj, obj_type=None):
+#         return super().__get__(obj, obj_type) + 100
 
 
 class Marks(schemas.Schema):
@@ -11,8 +11,8 @@ class Marks(schemas.Schema):
     mark_2IntegerField(min_value=0, max_value=200)
 
     def __post_init__(self, mark_1, mark_2):
-        self.mark_1 = mark_1
-        self.mark_2 = mark_2
+        self.mark_1 = mark_1 + 5
+        self.mark_2 = mark_2 + 10
 
 
 marks2 = Marks(mark_1=6, mark_2=62)

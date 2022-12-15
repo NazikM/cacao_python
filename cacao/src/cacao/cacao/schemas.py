@@ -1,3 +1,7 @@
+from pathlib import Path
+import os
+from importlib.machinery import SourceFileLoader
+
 from cacao.src.cacao.cacao.fields import Field
 from cacao.src.cacao.cacao.missing import MISSING
 
@@ -10,9 +14,29 @@ class Foo(dict):
         if not key.startswith('__'):
             if key == "classmethod" or key in Field.Fields or key == "fields":
                 raise KeyError
+            res = self.find_in_fields_files(key)
+            if res:
+                return res
             key, value = self.separate_key(key)
             func = Field.Fields[value]
             return wrapper
+
+    def get_all_files_paths(self, path):
+        res = []
+        for i in os.listdir(path):
+            if os.path.isdir(i):
+                res += self.get_all_files_paths(os.path.join(path, i))
+            elif i == "fields.py":
+                res.append(os.path.join(path, i))
+        return res
+
+    def find_in_fields_files(self, key):
+        root_dir = Path().absolute()
+        for file_path in self.get_all_files_paths(root_dir):
+            mod = SourceFileLoader("fields", file_path).load_module()
+            if res := vars(mod).get(key):
+                return res
+        return None
 
     def separate_key(self, key):
         for field_name in Field.Fields:
