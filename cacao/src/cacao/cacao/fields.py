@@ -6,6 +6,11 @@ from cacao.src.cacao.cacao.missing import MISSING
 
 
 class Field(ABC):
+    Fields = {}
+
+    def __init_subclass__(cls, **kwargs):
+        Field.Fields[cls.__name__] = cls
+
     def __init__(self, default=MISSING, write_only=False):
         self.default = default
         self.write_only = write_only
@@ -14,7 +19,7 @@ class Field(ABC):
         self.field_name = name
 
     def __get__(self, obj, objtype=None):
-        return self.value
+        return vars(obj).get(self.field_name, MISSING)
 
     def __set__(self, obj, value):
         if value is MISSING:
@@ -22,8 +27,7 @@ class Field(ABC):
         else:
             self.validate(value)
             value = self.cast(obj, value)
-
-        self.value = value
+        vars(obj)[self.field_name] = value
 
     @abstractmethod
     def validate(self, value):
@@ -55,7 +59,7 @@ class RequiredField(Field, ABC):
             self.validate(value)
             value = self.cast(obj, value)
 
-        self.value = value
+        vars(obj)[self.field_name] = value
 
     def raise_if_required(self):
         if self.required:
@@ -156,13 +160,13 @@ class NestedField(RequiredField):
         self.schema = schema
 
     def cast(self, obj, value):
-        # if self.schema == 'self':
-        #     self.schema = type(obj)
+        if self.schema == 'self':
+            self.schema = type(obj)
         return self.schema(**value)
 
     def validate(self, value):
-        # if self.schema == 'self':
-        #     return
+        if self.schema == 'self':
+            return
 
         if not issubclass(self.schema, Schema):
             raise TypeError(f"Expected Schema type, but given {type(value)}")
