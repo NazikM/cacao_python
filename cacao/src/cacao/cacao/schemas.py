@@ -39,10 +39,6 @@ class Schema(metaclass=OnlyFieldsMeta):
             if key not in vars(type(self)):
                 raise TypeError("Too many arguments!")
 
-        # for key, value in vars(type(self)).items():
-        #     if isinstance(value, Field):
-        #         setattr(self, key, kwargs.get(key, MISSING))
-        # print(kwargs)
         self.__post_init__(**kwargs)
 
     def __post_init__(self, **kwargs):
