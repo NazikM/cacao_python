@@ -58,16 +58,6 @@ class OnlyFieldsMeta(type):
 
 
 class Schema(metaclass=OnlyFieldsMeta):
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            if key not in vars(type(self)):
-                raise TypeError("Too many arguments!")
-
-        self.__post_init__(**kwargs)
-
-    def __post_init__(self, **kwargs):
-        ...
-
     @classmethod
     def from_dict(cls, data):
         return cls(**data)
