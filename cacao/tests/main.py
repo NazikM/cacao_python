@@ -1,4 +1,6 @@
 from cacao.src.cacao.cacao import fields, schemas
+from cacao.src.cacao.cacao.fields import IntegerField
+from cacao.src.cacao.cacao.magic import autoinit
 
 
 # class MyIntegerField(fields.IntegerField):
@@ -6,17 +8,22 @@ from cacao.src.cacao.cacao import fields, schemas
 #         return super().__get__(obj, obj_type) + 100
 
 
+@autoinit(merge=True)
 class Marks(schemas.Schema):
-    mark_1 = MyIntegerField(min_value=0, max_value=200)
+    mark_1 = IntegerField(min_value=0, max_value=200)
     mark_2IntegerField(min_value=0, max_value=200)
 
-    def __post_init__(self, mark_1, mark_2):
-        self.mark_1 = mark_1 + 5
-        self.mark_2 = mark_2 + 10
+    def __init__(self):
+        self.a = self.mark_2 + 1
 
 
-marks2 = Marks(mark_1=6, mark_2=62)
+# marks2 = Marks(mark_1=6, mark_2=62)
+marks2 = Marks.from_dict({
+    'mark_1': 5,
+    'mark_2': 62
+})
 print(marks2.to_dict())
+print(vars(marks2))
 
 
 
